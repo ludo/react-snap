@@ -15,7 +15,7 @@ const skipThirdPartyRequests = async opt => {
   if (!options.skipThirdPartyRequests) return;
   await page.setRequestInterception(true);
   page.on("request", request => {
-    if (request.url().startsWith(basePath)) {
+    if (request.url().startsWith(basePath) || request.url().startsWith("https://api.civicengine.com")) {
       request.continue();
     } else {
       request.abort();
@@ -32,7 +32,11 @@ const enableLogging = opt => {
   page.on("console", msg => {
     const text = msg.text();
     if (text !== 'JSHandle@object') {
-      console.log(`️️️💬  console.log at ${route}:`, text)
+      // https://github.com/stereobooster/react-snap/issues/242
+      // 'A lot of `Failed to load resource: net::ERR_FAILED` if you use `skipThirdPartyRequests: true`'
+      if (text.indexOf("net::ERR_FAILED") === -1 && text.indexOf("Error during service worker registration") === -1) {
+        console.log(`️️️💬  console.log at ${route}:`, text)
+      }
     } else {
       Promise.all(msg.args().map(x => x.jsonValue())).then(args =>
         console.log(`💬  console.log at ${route}:`, ...args)

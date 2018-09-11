@@ -15,7 +15,7 @@ const skipThirdPartyRequests = async opt => {
   if (!options.skipThirdPartyRequests) return;
   await page.setRequestInterception(true);
   page.on("request", request => {
-    if (request.url().startsWith(basePath) || request.url().startsWith("https://api.civicengine.com")) {
+    if (request.url().startsWith(basePath) || request.url().startsWith("https://api.civicengine.com") || request.url().startsWith("https://maps.googleapis.com")) {
       request.continue();
     } else {
       request.abort();

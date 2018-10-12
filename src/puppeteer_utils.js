@@ -200,7 +200,8 @@ const crawl = async opt => {
           options,
           route,
           onError: () => {
-            shuttingDown = true;
+            console.log("ERROR SKIP")
+            // shuttingDown = true;
           },
           sourcemapStore
         });

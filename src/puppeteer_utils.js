@@ -212,7 +212,7 @@ const crawl = async opt => {
           await page.goto(pageUrl, { waitUntil: "networkidle0" });
         } catch (e) {
           e.message = augmentTimeoutError(e.message, tracker);
-          throw e;
+          console.log(e.message);
         } finally {
           tracker.dispose();
         }

@@ -45,7 +45,11 @@ const enableLogging = opt => {
         console.log(`💬  console.log at ${route}:`, ...args)
       );
     } else {
-      console.log(`️️️💬  console.log at ${route}:`, text);
+      // https://github.com/stereobooster/react-snap/issues/242
+      // 'A lot of `Failed to load resource: net::ERR_FAILED` if you use `skipThirdPartyRequests: true`'
+      if (text.indexOf("net::ERR_FAILED") === -1 && text.indexOf("Error during service worker registration") === -1) {
+        console.log(`️️️💬  console.log at ${route}:`, text);
+      }
     }
   });
   page.on("error", msg => {

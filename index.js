@@ -107,8 +107,12 @@ const defaults = userOptions => {
     console.log("🔥  asyncJs option renamed to asyncScriptTags");
     options.asyncScriptTags = options.asyncJs;
   }
-  if (options.saveAs !== "html" && options.saveAs !== "png") {
-    console.log("🔥  saveAs supported values are html and png");
+  if (
+    options.saveAs !== "html" &&
+    options.saveAs !== "png" &&
+    options.saveAs !== "jpeg"
+  ) {
+    console.log("🔥  saveAs supported values are html, png, and jpeg");
     exit = true;
   }
   if (exit) throw new Error();
@@ -126,6 +130,8 @@ const defaults = userOptions => {
   );
   return options;
 };
+
+const normalizePath = path => (path === "/" ? "/" : path.replace(/\/$/, ""));
 
 /**
  *
@@ -330,10 +336,15 @@ const inlineCss = async opt => {
     );
   } else {
     await page.evaluate(allCss => {
+      if (!allCss) return;
+
       const head = document.head || document.getElementsByTagName("head")[0],
         style = document.createElement("style");
       style.type = "text/css";
       style.appendChild(document.createTextNode(allCss));
+
+      if (!head) throw new Error("No <head> element found in document");
+
       head.appendChild(style);
 
       const stylesheets = Array.from(
@@ -485,9 +496,22 @@ const saveAsPng = ({ page, filePath, options, route }) => {
   if (route.endsWith(".html")) {
     screenshotPath = filePath.replace(/\.html$/, ".png");
   } else if (route === "/") {
-    screenshotPath = `${filePath}/index.png`;
+    screenshotPath = `${filePath}index.png`;
   } else {
     screenshotPath = `${filePath.replace(/\/$/, "")}.png`;
+  }
+  return page.screenshot({ path: screenshotPath });
+};
+
+const saveAsJpeg = ({ page, filePath, options, route }) => {
+  mkdirp.sync(path.dirname(filePath));
+  let screenshotPath;
+  if (route.endsWith(".html")) {
+    screenshotPath = filePath.replace(/\.html$/, ".jpeg");
+  } else if (route === "/") {
+    screenshotPath = `${filePath}index.jpeg`;
+  } else {
+    screenshotPath = `${filePath.replace(/\/$/, "")}.jpeg`;
   }
   return page.screenshot({ path: screenshotPath });
 };
@@ -662,12 +686,23 @@ const run = async (userOptions, { fs } = { fs: nativeFs }) => {
       if (options.fixInsertRule) await fixInsertRule({ page });
       await fixFormFields({ page });
 
-      const routePath = route.replace(publicPath, "");
-      const filePath = path.join(destinationDir, routePath);
+      let routePath = route.replace(publicPath, "");
+      let filePath = path.join(destinationDir, routePath);
       if (options.saveAs === "html") {
         await saveAsHtml({ page, filePath, options, route, fs });
+        routePath = normalizePath(routePath);
+        let newPath = await page.evaluate(() => location.pathname);
+        newPath = newPath.replace(publicPath, "");
+        newPath = normalizePath(newPath);
+        if (routePath !== newPath) {
+          console.log(`💬  in browser redirect (${newPath})`);
+          filePath = path.join(destinationDir, newPath);
+          await saveAsHtml({ page, filePath, options, route, fs });
+        }
       } else if (options.saveAs === "png") {
         await saveAsPng({ page, filePath, options, route, fs });
+      } else if (options.saveAs === "jpeg") {
+        await saveAsJpeg({ page, filePath, options, route, fs });
       }
     },
     onEnd: () => {

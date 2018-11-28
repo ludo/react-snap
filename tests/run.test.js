@@ -1,5 +1,9 @@
 // FIX: tests are slow - use unit tests instead of integration tests
 // TODO: capture console log from run function
+const fs = require("fs");
+const writeFileSpy = jest.spyOn(fs, "writeFile");
+writeFileSpy.mockImplementation((file, data, cb) => cb());
+
 const { mockFs } = require("./helper.js");
 const { run } = require("./../index.js");
 const snapRun = (fs, options) =>
@@ -51,6 +55,52 @@ describe("one page", () => {
     expect(name(0)).toEqual(`/${source}/index.html`);
     expect(content(0)).toEqual(
       '<html lang="en"><head><meta charset="utf-8"></head><body><script>document.body.appendChild(document.createTextNode("test"));</script>test</body></html>'
+    );
+  });
+  test("copies (original) index.html to 200.html", () => {
+    expect(createReadStreamMock.mock.calls).toEqual([
+      [`/${source}/index.html`]
+    ]);
+    expect(createWriteStreamMock.mock.calls).toEqual([[`/${source}/200.html`]]);
+  });
+});
+
+describe("saveAs png", () => {
+  const source = "tests/examples/one-page";
+  const cwd = process.cwd();
+  const {
+    fs: mockedFs,
+    createReadStreamMock,
+    createWriteStreamMock
+  } = mockFs();
+  beforeAll(() => snapRun(mockedFs, { source, saveAs: "png" }));
+  afterAll(() => writeFileSpy.mockClear());
+  test("crawls / and saves as index.png to the same folder", () => {
+    expect(writeFileSpy).toHaveBeenCalledTimes(1);
+    expect(writeFileSpy.mock.calls[0][0]).toEqual(cwd + `/${source}/index.png`);
+  });
+  test("copies (original) index.html to 200.html", () => {
+    expect(createReadStreamMock.mock.calls).toEqual([
+      [`/${source}/index.html`]
+    ]);
+    expect(createWriteStreamMock.mock.calls).toEqual([[`/${source}/200.html`]]);
+  });
+});
+
+describe("saveAs jpeg", () => {
+  const source = "tests/examples/one-page";
+  const cwd = process.cwd();
+  const {
+    fs: mockedFs,
+    createReadStreamMock,
+    createWriteStreamMock
+  } = mockFs();
+  beforeAll(() => snapRun(mockedFs, { source, saveAs: "jpeg" }));
+  afterAll(() => writeFileSpy.mockClear());
+  test("crawls / and saves as index.png to the same folder", () => {
+    expect(writeFileSpy).toHaveBeenCalledTimes(1);
+    expect(writeFileSpy.mock.calls[0][0]).toEqual(
+      cwd + `/${source}/index.jpeg`
     );
   });
   test("copies (original) index.html to 200.html", () => {
@@ -144,7 +194,8 @@ describe("possible to disable crawl option", () => {
       source,
       crawl: false,
       include: ["/1", "/2/", "/3#test", "/4?test"]
-    }));
+    })
+  );
   test("crawls all links and saves as index.html in separate folders", () => {
     // no / or /404.html
     expect(writeFileSyncMock.mock.calls.length).toEqual(4);
@@ -173,7 +224,8 @@ describe("inlineCss - small file", () => {
       source,
       inlineCss: true,
       include: ["/with-small-css.html"]
-    }));
+    })
+  );
   // 1. I want to change this behaviour
   // see https://github.com/stereobooster/react-snap/pull/133/files
   // 2. There is a bug with relative url in inlined CSS url(bg.png)
@@ -214,6 +266,16 @@ describe("inlineCss - big file", () => {
   });
 });
 
+describe("inlineCss - partial document", () => {
+  const source = "tests/examples/partial";
+  const { fs, filesCreated, content } = mockFs();
+  beforeAll(() => snapRun(fs, { source, inlineCss: true }));
+  test("no inline style", () => {
+    expect(filesCreated()).toEqual(1);
+    expect(content(0)).not.toMatch('<style type="text/css">');
+  });
+});
+
 describe("removeBlobs", () => {
   const source = "tests/examples/other";
   const include = ["/remove-blobs.html"];
@@ -248,7 +310,8 @@ describe("ignoreForPreload", () => {
       include,
       http2PushManifest: true,
       ignoreForPreload: ["big.css"]
-    }));
+    })
+  );
   test("writes http2 manifest file", () => {
     expect(filesCreated()).toEqual(2);
     expect(content(1)).toEqual("[]");
@@ -288,7 +351,8 @@ describe("removeStyleTags", () => {
       source,
       include,
       removeStyleTags: true
-    }));
+    })
+  );
   test("removes all <style>", () => {
     expect(filesCreated()).toEqual(1);
     expect(content(0)).not.toMatch("<style");
@@ -333,7 +397,7 @@ describe("preloadImages", () => {
 describe("handles JS errors", () => {
   const source = "tests/examples/other";
   const include = ["/with-script-error.html"];
-  const { fs, filesCreated, content } = mockFs();
+  const { fs } = mockFs();
   test("returns rejected promise", () =>
     snapRun(fs, { source, include })
       .then(() => expect(true).toEqual(false))
@@ -342,7 +406,7 @@ describe("handles JS errors", () => {
 
 describe("You can not run react-snap twice", () => {
   const source = "tests/examples/processed";
-  const { fs, filesCreated, content } = mockFs();
+  const { fs } = mockFs();
   test("returns rejected promise", () =>
     snapRun(fs, { source })
       .then(() => expect(true).toEqual(false))
@@ -441,6 +505,40 @@ describe("cacheAjaxRequests", () => {
     expect(content(0)).toMatch(
       'window.snapStore={"\\u002Fjs\\u002Ftest.json":{"test":1}};'
     );
+  });
+});
+
+describe("svgLinks", () => {
+  const source = "tests/examples/other";
+  const include = ["/svg.html"];
+  const { fs, filesCreated } = mockFs();
+  beforeAll(() => snapRun(fs, { source, include }));
+  test("Find SVG Links", () => {
+    expect(filesCreated()).toEqual(3);
+  });
+});
+
+describe("history.pushState", () => {
+  const source = "tests/examples/other";
+  const include = ["/history-push.html"];
+  const { fs, filesCreated, name } = mockFs();
+  beforeAll(() => snapRun(fs, { source, include }));
+  test("in case of browser redirect it creates 2 files", () => {
+    expect(filesCreated()).toEqual(2);
+    expect(name(0)).toEqual("/tests/examples/other/history-push.html");
+    expect(name(1)).toEqual("/tests/examples/other/hello");
+  });
+});
+
+describe("history.pushState in sub-directory", () => {
+  const source = "tests/examples/other";
+  const include = ["/history-push.html"];
+  const { fs, filesCreated, name } = mockFs();
+  beforeAll(() => snapRun(fs, { source, include, publicPath: "/other" }));
+  test("in case of browser redirect it creates 2 files", () => {
+    expect(filesCreated()).toEqual(2);
+    expect(name(0)).toEqual("/tests/examples/other/history-push.html");
+    expect(name(1)).toEqual("/tests/examples/other/hello");
   });
 });
 
